@@ -20,8 +20,22 @@ if getattr(sys, "frozen", False):
     BASE_DIR = os.path.dirname(sys.executable)
 else:
     BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MOTORISTAS_FILE = os.path.join(BASE_DIR, "motoristas.json")
-FILA_FILE = os.path.join(BASE_DIR, "fila_tabelas.json")
+def get_data_file(filename):
+    if os.getenv("VERCEL"):
+        target = os.path.join("/tmp", filename)
+        if not os.path.exists(target):
+            source = os.path.join(BASE_DIR, filename)
+            if os.path.exists(source):
+                try:
+                    import shutil
+                    shutil.copy2(source, target)
+                except Exception:
+                    pass
+        return target
+    return os.path.join(BASE_DIR, filename)
+
+MOTORISTAS_FILE = get_data_file("motoristas.json")
+FILA_FILE = get_data_file("fila_tabelas.json")
 WHATSAPP_API_URL = os.getenv("WHATSAPP_API_URL", "").strip()
 WHATSAPP_API_TOKEN = os.getenv("WHATSAPP_API_TOKEN", "").strip()
 
@@ -30,17 +44,28 @@ app = Flask(__name__)
 
 def load_json(path, default):
     try:
+        if os.getenv("VERCEL") and not os.path.exists(path):
+            base_path = os.path.join(BASE_DIR, os.path.basename(path))
+            if os.path.exists(base_path):
+                path = base_path
         with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
         return default
 
 
 def save_json(path, data):
-    temp = path + ".tmp"
-    with open(temp, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=2)
-    os.replace(temp, path)
+    try:
+        temp = path + ".tmp"
+        with open(temp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(temp, path)
+    except OSError:
+        tmp_target = os.path.join("/tmp", os.path.basename(path))
+        temp = tmp_target + ".tmp"
+        with open(temp, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        os.replace(temp, tmp_target)
 
 
 def get_motoristas():
