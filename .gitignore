@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+_temp_relatorio.xlsx
+test_relatorio.xlsx
+.vscode/
+.idea/

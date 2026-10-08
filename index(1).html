@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MP CARGAS — Conversor SSW</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" rel="stylesheet">
+    <!-- SheetJS (xlsx) para gerar planilhas Excel 100% no navegador sem backend -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <style>
+        :root {
+            --primary-navy: #1a365d;
+            --primary-accent: #2b6cb0;
+        }
+        body {
+            background-color: #f8fafc;
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            color: #2d3748;
+        }
+        .navbar-brand {
+            font-weight: 800;
+            letter-spacing: 0.5px;
+        }
+        .card-custom {
+            border-radius: 12px;
+            border: 1px solid rgba(0,0,0,0.06);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+            background: #ffffff;
+        }
+        .stat-card {
+            border-radius: 10px;
+            padding: 16px;
+            transition: transform 0.2s ease;
+        }
+        .stat-card:hover {
+            transform: translateY(-2px);
+        }
+        .badge-atrasado {
+            background-color: #fee2e2;
+            color: #991b1b;
+            font-weight: 700;
+            border: 1px solid #fca5a5;
+        }
+        .badge-noprazo {
+            background-color: #dcfce7;
+            color: #166534;
+            font-weight: 700;
+            border: 1px solid #86efac;
+        }
+        .badge-seminfo {
+            background-color: #f3f4f6;
+            color: #4b5563;
+            font-weight: 600;
+            border: 1px solid #d1d5db;
+        }
+        .table-container {
+            max-height: 520px;
+            overflow-y: auto;
+            border-radius: 8px;
+        }
+        .table thead th {
+            position: sticky;
+            top: 0;
+            background-color: var(--primary-navy);
+            color: #ffffff;
+            font-weight: 600;
+            font-size: 0.85rem;
+            letter-spacing: 0.5px;
+            z-index: 10;
+        }
+        .btn-navy {
+            background-color: var(--primary-navy);
+            color: white;
+            border: none;
+        }
+        .btn-navy:hover {
+            background-color: #102a43;
+            color: white;
+        }
+        .text-navy {
+            color: var(--primary-navy);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- CABEÇALHO -->
+    <nav class="navbar navbar-dark shadow-sm" style="background-color: var(--primary-navy);">
+        <div class="container-fluid px-4 py-2">
+            <span class="navbar-brand mb-0 h1">
+                <i class="fa-solid fa-truck-fast me-2 text-warning"></i>MP CARGAS
+                <small class="text-white-50 fs-6 ms-2">| Conversor SSW → Excel</small>
+            </span>
+            <span class="badge bg-success-subtle text-success border border-success-subtle px-3 py-2">
+                <i class="fa-solid fa-shield-halved me-1"></i> 100% Seguro & Local
+            </span>
+        </div>
+    </nav>
+
+    <div class="container-fluid px-4 py-4">
+        <!-- ÁREA DE ENTRADA -->
+        <div id="input-card" class="card card-custom p-4 mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+                <div>
+                    <h5 class="fw-bold mb-1 text-navy">
+                        <i class="fa-solid fa-clipboard-list me-2 text-primary"></i>Cole a tabela copiada do SSW
+                    </h5>
+                    <p class="text-muted small mb-0">Cole os dados copiados diretamente da consulta do sistema SSW.</p>
+                </div>
+                <button class="btn btn-outline-primary btn-sm fw-semibold" id="btn-clipboard">
+                    <i class="fa-regular fa-clipboard me-1"></i> Colar da Área de Transferência
+                </button>
+            </div>
+
+            <div class="mb-3">
+                <textarea id="raw-input" class="form-control font-monospace" rows="8" placeholder="Cole aqui o conteúdo copiado do SSW (com barras | ou texto copiado com Ctrl+V)..." style="font-size: 0.9rem; background-color: #fafbfc;"></textarea>
+            </div>
+
+            <div class="d-flex gap-2">
+                <button id="btn-processar" class="btn btn-navy px-4 py-2 fw-bold">
+                    <i class="fa-solid fa-bolt me-1"></i> PROCESSAR TABELA
+                </button>
+                <button id="btn-limpar" class="btn btn-outline-secondary px-3 py-2">
+                    <i class="fa-solid fa-trash me-1"></i> Limpar
+                </button>
+            </div>
+
+            <div id="alert-error" class="alert alert-danger mt-3 d-none" role="alert"></div>
+        </div>
+
+        <!-- DASHBOARD E RESULTADOS -->
+        <div id="results-card" class="d-none">
+            <!-- CARDS DE RESUMO -->
+            <div class="row g-3 mb-4">
+                <div class="col-md-3 col-6">
+                    <div class="card card-custom stat-card text-center bg-white">
+                        <div class="text-muted small fw-bold text-uppercase">TOTAL DE CT-RCs</div>
+                        <div class="fs-2 fw-bold text-navy mt-1" id="card-total">0</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="card card-custom stat-card text-center" style="background-color: #fef2f2;">
+                        <div class="text-danger small fw-bold text-uppercase">ATRASADOS</div>
+                        <div class="fs-2 fw-bold text-danger mt-1" id="card-atrasados">0</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="card card-custom stat-card text-center" style="background-color: #f0fdf4;">
+                        <div class="text-success small fw-bold text-uppercase">NO PRAZO</div>
+                        <div class="fs-2 fw-bold text-success mt-1" id="card-noprazo">0</div>
+                    </div>
+                </div>
+                <div class="col-md-3 col-6">
+                    <div class="card card-custom stat-card text-center" style="background-color: #f8fafc;">
+                        <div class="text-secondary small fw-bold text-uppercase">SEM INFORMAÇÃO</div>
+                        <div class="fs-2 fw-bold text-secondary mt-1" id="card-seminfo">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- BARRA DE AÇÃO E FILTROS -->
+            <div class="card card-custom p-3 mb-4">
+                <div class="row g-2 align-items-center">
+                    <div class="col-md-4">
+                        <div class="input-group">
+                            <span class="input-group-text bg-light border-end-0"><i class="fa-solid fa-magnifying-glass text-muted"></i></span>
+                            <input type="text" id="filter-search" class="form-control border-start-0" placeholder="Buscar CTRC, Nota Fiscal...">
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <select id="filter-situacao" class="form-select">
+                            <option value="TODOS">Situação: TODAS</option>
+                            <option value="ATRASADO">ATRASADO</option>
+                            <option value="NO PRAZO">NO PRAZO</option>
+                            <option value="SEM INFORMAÇÃO">SEM INFORMAÇÃO</option>
+                        </select>
+                    </div>
+                    <div class="col-md-5 d-flex justify-content-end gap-2 flex-wrap">
+                        <button id="btn-exportar" class="btn btn-success fw-bold px-3 py-2">
+                            <i class="fa-solid fa-file-excel me-1"></i> EXPORTAR EXCEL (.xlsx)
+                        </button>
+                        <button id="btn-novo" class="btn btn-outline-secondary fw-semibold px-3 py-2">
+                            <i class="fa-solid fa-rotate-left me-1"></i> Nova Importação
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TABELA SOLICITADA -->
+            <div class="card card-custom overflow-hidden mb-4">
+                <div class="table-container">
+                    <table class="table table-hover table-striped align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th class="py-3 px-3">CTRC</th>
+                                <th class="py-3">DATA DE EMISSÃO</th>
+                                <th class="py-3">NOTA FISCAL</th>
+                                <th class="py-3 text-center">DIAS DE ATRASO</th>
+                                <th class="py-3 text-center">SITUAÇÃO</th>
+                            </tr>
+                        </thead>
+                        <tbody id="table-body"></tbody>
+                    </table>
+                </div>
+                <div class="p-3 bg-light border-top small text-muted d-flex justify-content-between align-items-center">
+                    <span id="counter-info">Exibindo 0 registros</span>
+                    <span>MP CARGAS — Sistema de Entregas</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- SCRIPT DE PROCESSAMENTO 100% CLIENT-SIDE -->
+    <script>
+        let currentRecords = [];
+
+        const CTRC_REGEX = /^[A-Z0-9]{2,5}\d{4,8}-\d$/i;
+
+        function cleanText(text) {
+            if (!text) return "";
+            let s = text.replace(/&nbsp;/g, ' ').replace(/&#xA0;/g, ' ');
+            // Decodifica HTML basico
+            const doc = new DOMParser().parseFromString(s, 'text/html');
+            s = doc.body.textContent || "";
+            // Remove markdown links [Texto](URL) -> Texto
+            s = s.replace(/\[([^\]]*)\]\([^)]*\)/g, '$1');
+            s = s.replace(/[\[\]*_]/g, '');
+            s = s.replace(/[\r\n\t]+/g, ' ');
+            return s.trim().replace(/\s+/g, ' ');
+        }
+
+        function parseAtraso(valStr) {
+            const clean = cleanText(valStr);
+            if (!clean || clean === '-' || clean.toLowerCase() === 'vazio') {
+                return { dias: null, situacao: "SEM INFORMAÇÃO" };
+            }
+            const match = clean.match(/-?\d+/);
+            if (match) {
+                const dias = parseInt(match[0], 10);
+                if (dias > 0) return { dias: dias, situacao: "ATRASADO" };
+                return { dias: dias, situacao: "NO PRAZO" };
+            }
+            return { dias: null, situacao: "SEM INFORMAÇÃO" };
+        }
+
+        function isValidCTRC(ctrc) {
+            if (!ctrc) return false;
+            const val = ctrc.trim().toUpperCase();
+            if (CTRC_REGEX.test(val)) return true;
+            if (val.includes('-') && val.length >= 7) {
+                const parts = val.split('-');
+                return parts.length === 2 && /^\d+$/.test(parts[1]) && parts[0].length >= 4;
+            }
+            return false;
+        }
+
+        function parseSSW(rawText) {
+            if (!rawText || !rawText.trim()) {
+                throw new Error("Por favor, cole a tabela antes de processar.");
+            }
+
+            const lines = rawText.split('\n').map(l => l.trim()).filter(Boolean);
+
+            // 1. Caso com barras verticais |
+            if (rawText.includes('|')) {
+                let headerFound = false;
+                let headerIndices = {};
+                let records = [];
+
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    if (!line.includes('|')) continue;
+                    let cells = line.split('|').map(c => cleanText(c));
+                    if (cells.length > 0 && cells[0] === "") cells.shift();
+                    if (cells.length > 0 && cells[cells.length - 1] === "") cells.pop();
+
+                    // Separador markdown
+                    if (cells.every(c => /^[-:\s]+$/.test(c))) continue;
+
+                    if (!headerFound) {
+                        const upper = cells.map(c => c.toUpperCase());
+                        if (upper.some(c => c.includes('CTRC'))) {
+                            upper.forEach((col, idx) => {
+                                if (col.includes('CTRC')) headerIndices['CTRC'] = idx;
+                                if (col.includes('EMISSAO') || col.includes('EMISSÃO')) headerIndices['EMISSAO'] = idx;
+                                if (col.includes('FISCAL') || col.includes('NF')) headerIndices['NF'] = idx;
+                                if (col.includes('ATRASO')) headerIndices['ATRASO'] = idx;
+                            });
+                            headerFound = true;
+                        }
+                    } else {
+                        // Linha de dados
+                        const ctrcIdx = headerIndices['CTRC'] ?? 0;
+                        const emissaoIdx = headerIndices['EMISSAO'] ?? 1;
+                        const nfIdx = headerIndices['NF'] ?? 6;
+                        const atrasoIdx = headerIndices['ATRASO'] ?? 11;
+
+                        const ctrcVal = cells[ctrcIdx] || "";
+                        if (isValidCTRC(ctrcVal)) {
+                            const atrInfo = parseAtraso(cells[atrasoIdx] || "");
+                            records.push({
+                                ctrc: ctrcVal,
+                                emissao: cells[emissaoIdx] || "",
+                                nf: cells[nfIdx] || "",
+                                diasAtraso: atrInfo.dias,
+                                situacao: atrInfo.situacao
+                            });
+                        }
+                    }
+                }
+                if (records.length > 0) return records;
+            }
+
+            // 2. Caso copiado como linhas verticais/stream
+            const cleanedLines = lines.map(cleanText).filter(l => !/^[×xX\-_=]+$/.test(l));
+            const ctrcIndices = [];
+            cleanedLines.forEach((line, idx) => {
+                const token = line.split(/\t/)[0].trim();
+                if (isValidCTRC(token)) {
+                    ctrcIndices.push({ idx: idx, ctrc: token });
+                }
+            });
+
+            if (ctrcIndices.length === 0) {
+                throw new Error("Não foi possível identificar registros válidos do SSW. Verifique o conteúdo colado.");
+            }
+
+            const records = [];
+            const dateRegex = /^\d{2}\/\d{2}\/\d{2,4}$/;
+
+            for (let i = 0; i < ctrcIndices.length; i++) {
+                const start = ctrcIndices[i].idx;
+                const end = (i + 1 < ctrcIndices.length) ? ctrcIndices[i + 1].idx : cleanedLines.length;
+                let tokens = cleanedLines.slice(start, end);
+
+                let ctrcVal = ctrcIndices[i].ctrc;
+                let emissao = "";
+                let nf = "";
+                let atrasoRaw = "";
+
+                if (tokens.length >= 12) {
+                    emissao = tokens[1] || "";
+                    nf = tokens[6] || "";
+                    atrasoRaw = tokens[11] || "";
+                } else {
+                    if (tokens.length > 1 && dateRegex.test(tokens[1])) emissao = tokens[1];
+                    if (tokens.length > 6) nf = tokens[6];
+                    for (let t of tokens) {
+                        if (/^\d{1,3}$/.test(t)) {
+                            atrasoRaw = t;
+                            break;
+                        }
+                    }
+                }
+
+                const atrInfo = parseAtraso(atrasoRaw);
+                records.push({
+                    ctrc: ctrcVal,
+                    emissao: emissao,
+                    nf: nf,
+                    diasAtraso: atrInfo.dias,
+                    situacao: atrInfo.situacao
+                });
+            }
+
+            return records;
+        }
+
+        // Colar da área de transferência
+        document.getElementById('btn-clipboard').addEventListener('click', async () => {
+            try {
+                const text = await navigator.clipboard.readText();
+                document.getElementById('raw-input').value = text;
+            } catch (err) {
+                alert("Pressione Ctrl + V dentro da caixa de texto para colar.");
+            }
+        });
+
+        // Limpar
+        document.getElementById('btn-limpar').addEventListener('click', () => {
+            document.getElementById('raw-input').value = "";
+            document.getElementById('alert-error').classList.add('d-none');
+        });
+
+        // Processar
+        document.getElementById('btn-processar').addEventListener('click', () => {
+            const errBox = document.getElementById('alert-error');
+            errBox.classList.add('d-none');
+
+            try {
+                const text = document.getElementById('raw-input').value;
+                currentRecords = parseSSW(text);
+
+                // Renderizar cards
+                const total = currentRecords.length;
+                const atrasados = currentRecords.filter(r => r.situacao === 'ATRASADO').length;
+                const noprazo = currentRecords.filter(r => r.situacao === 'NO PRAZO').length;
+                const seminfo = currentRecords.filter(r => r.situacao === 'SEM INFORMAÇÃO').length;
+
+                document.getElementById('card-total').textContent = total;
+                document.getElementById('card-atrasados').textContent = atrasados;
+                document.getElementById('card-noprazo').textContent = noprazo;
+                document.getElementById('card-seminfo').textContent = seminfo;
+
+                applyFilter();
+                document.getElementById('results-card').classList.remove('d-none');
+                document.getElementById('results-card').scrollIntoView({ behavior: 'smooth' });
+            } catch (err) {
+                errBox.textContent = err.message;
+                errBox.classList.remove('d-none');
+            }
+        });
+
+        // Nova importação
+        document.getElementById('btn-novo').addEventListener('click', () => {
+            document.getElementById('results-card').classList.add('d-none');
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        });
+
+        // Filtros
+        document.getElementById('filter-search').addEventListener('input', applyFilter);
+        document.getElementById('filter-situacao').addEventListener('change', applyFilter);
+
+        function applyFilter() {
+            const query = document.getElementById('filter-search').value.trim().toLowerCase();
+            const sit = document.getElementById('filter-situacao').value;
+
+            const filtered = currentRecords.filter(r => {
+                if (sit !== 'TODOS' && r.situacao !== sit) return false;
+                if (query) {
+                    const rowText = `${r.ctrc} ${r.nf} ${r.emissao}`.toLowerCase();
+                    if (!rowText.includes(query)) return false;
+                }
+                return true;
+            });
+
+            const tbody = document.getElementById('table-body');
+            tbody.innerHTML = "";
+
+            filtered.forEach(r => {
+                const tr = document.createElement('tr');
+                const sitBadge = r.situacao === 'ATRASADO' ? 'badge-atrasado' : (r.situacao === 'NO PRAZO' ? 'badge-noprazo' : 'badge-seminfo');
+                const dias = r.diasAtraso !== null ? r.diasAtraso : '-';
+
+                tr.innerHTML = `
+                    <td class="fw-bold px-3 text-nowrap">${r.ctrc}</td>
+                    <td class="text-nowrap">${r.emissao}</td>
+                    <td class="fw-bold text-nowrap">${r.nf}</td>
+                    <td class="text-center fw-bold fs-6">${dias}</td>
+                    <td class="text-center"><span class="badge ${sitBadge} px-2 py-1">${r.situacao}</span></td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            document.getElementById('counter-info').textContent = `Exibindo ${filtered.length} de ${currentRecords.length} registros`;
+        }
+
+        // Exportar para Excel (.xlsx) diretamente no navegador via SheetJS
+        document.getElementById('btn-exportar').addEventListener('click', () => {
+            if (!currentRecords.length) return;
+
+            // Formatar dados para o Excel com as 5 colunas solicitadas
+            const dataToExport = currentRecords.map(r => ({
+                "CTRC": r.ctrc,
+                "DATA EMISSÃO": r.emissao,
+                "NOTA FISCAL": r.nf,
+                "DIAS DE ATRASO": r.diasAtraso !== null ? r.diasAtraso : "",
+                "SITUAÇÃO": r.situacao
+            }));
+
+            const ws = XLSX.utils.json_to_sheet(dataToExport);
+
+            // Ajustar largura das colunas
+            ws['!cols'] = [
+                { wch: 16 }, // CTRC
+                { wch: 15 }, // DATA EMISSÃO
+                { wch: 15 }, // NOTA FISCAL
+                { wch: 16 }, // DIAS DE ATRASO
+                { wch: 18 }  // SITUAÇÃO
+            ];
+
+            const wb = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(wb, ws, "ACOMPANHAMENTO");
+
+            // Gerar download
+            const today = new Date().toISOString().slice(0, 10);
+            XLSX.writeFile(wb, `MP_CARGAS_SSW_${today}.xlsx`);
+        });
+    </script>
+</body>
+</html>
